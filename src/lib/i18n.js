@@ -75,6 +75,7 @@ const translations = {
     products: 'المخزن',
     addProduct: 'مادة جديدة',
     inventory: 'الجرد',
+    suppliers: 'الشركات',
   },
   ku_sorani: {
     appName: 'ئەلیکترۆ سوقو',
@@ -152,6 +153,7 @@ const translations = {
     products: 'کۆگا',
     addProduct: 'کاڵای نوێ',
     inventory: 'ژمارکردن',
+    suppliers: 'کۆمپانیاکان',
   },
   ku_badini: {
     appName: 'ئەلیکترۆ سوقو',
@@ -229,6 +231,7 @@ const translations = {
     products: 'مالخانه‌',
     addProduct: 'شتەمەنی نوێ',
     inventory: 'ژمارکردن',
+    suppliers: 'کۆمپانیاکان',
   },
 }
 

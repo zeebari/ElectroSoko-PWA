@@ -49,11 +49,17 @@ export default function ProductsPage() {
     <div className="p-4 space-y-4" dir="rtl">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800">المخزن</h1>
-        <Link to="/products/new"
-          className="flex items-center gap-1 bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 active:scale-95 transition-all">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-          مادة جديدة
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/inventory"
+            className="flex items-center gap-1 border border-slate-300 text-slate-700 px-3 py-2 rounded-xl text-sm font-semibold hover:bg-slate-50 active:scale-95 transition-all">
+            جرد
+          </Link>
+          <Link to="/products/new"
+            className="flex items-center gap-1 bg-blue-600 text-white px-3 py-2 rounded-xl text-sm font-semibold hover:bg-blue-700 active:scale-95 transition-all">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+            جديد
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}

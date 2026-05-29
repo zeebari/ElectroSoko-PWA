@@ -15,6 +15,10 @@ import SettingsPage from './pages/SettingsPage'
 import ProductsPage from './pages/ProductsPage'
 import AddProductPage from './pages/AddProductPage'
 import ProductDetailPage from './pages/ProductDetailPage'
+import InventoryReportPage from './pages/InventoryReportPage'
+import SuppliersPage from './pages/SuppliersPage'
+import AddSupplierPage from './pages/AddSupplierPage'
+import SupplierDetailPage from './pages/SupplierDetailPage'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -52,6 +56,11 @@ export default function App() {
           <Route path="/products/new" element={<AddProductPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/products/:id/edit" element={<AddProductPage />} />
+          <Route path="/inventory" element={<InventoryReportPage />} />
+          <Route path="/suppliers" element={<SuppliersPage key={langKey} />} />
+          <Route path="/suppliers/new" element={<AddSupplierPage />} />
+          <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
+          <Route path="/suppliers/:id/edit" element={<AddSupplierPage />} />
           <Route path="/settings" element={<SettingsPage key={langKey} onLangChange={() => setLangKey(k => k + 1)} />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
         </Routes>
