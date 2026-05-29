@@ -31,7 +31,6 @@ import AddExpensePage from './pages/AddExpensePage'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
-  const [langKey, setLangKey] = useState(0)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -51,30 +50,30 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Layout onLangChange={() => setLangKey(k => k + 1)}>
+      <Layout>
         <Routes>
-          <Route path="/" element={<DashboardPage key={langKey} />} />
+          <Route path="/" element={<DashboardPage />} />
           {/* Sales */}
-          <Route path="/sales" element={<SalesPage key={langKey} />} />
+          <Route path="/sales" element={<SalesPage />} />
           <Route path="/sales/new" element={<NewSalePage />} />
           <Route path="/sales/:id" element={<SaleDetailPage />} />
           {/* Customers */}
-          <Route path="/customers" element={<CustomersPage key={langKey} />} />
+          <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/new" element={<AddCustomerPage />} />
           <Route path="/customers/:id" element={<CustomerDetailPage />} />
           {/* Plans */}
-          <Route path="/plans" element={<PlansPage key={langKey} />} />
+          <Route path="/plans" element={<PlansPage />} />
           <Route path="/plans/new" element={<AddPlanPage />} />
           <Route path="/plans/:id" element={<PlanDetailPage />} />
-          <Route path="/payments" element={<PaymentsPage key={langKey} />} />
+          <Route path="/payments" element={<PaymentsPage />} />
           {/* Products */}
-          <Route path="/products" element={<ProductsPage key={langKey} />} />
+          <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/new" element={<AddProductPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/products/:id/edit" element={<AddProductPage />} />
           <Route path="/inventory" element={<InventoryReportPage />} />
           {/* Suppliers */}
-          <Route path="/suppliers" element={<SuppliersPage key={langKey} />} />
+          <Route path="/suppliers" element={<SuppliersPage />} />
           <Route path="/suppliers/new" element={<AddSupplierPage />} />
           <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
           <Route path="/suppliers/:id/edit" element={<AddSupplierPage />} />
@@ -82,11 +81,11 @@ export default function App() {
           <Route path="/suppliers/:id/pay" element={<AddPaymentPage />} />
           <Route path="/purchases/new" element={<AddPurchasePage />} />
           {/* Accounting */}
-          <Route path="/accounting" element={<AccountingPage key={langKey} />} />
+          <Route path="/accounting" element={<AccountingPage />} />
           <Route path="/profit-report" element={<ProfitReportPage />} />
           <Route path="/expenses/new" element={<AddExpensePage />} />
           {/* Settings */}
-          <Route path="/settings" element={<SettingsPage key={langKey} onLangChange={() => setLangKey(k => k + 1)} />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
