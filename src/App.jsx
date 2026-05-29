@@ -25,6 +25,9 @@ import AddPaymentPage from './pages/AddPaymentPage'
 import SalesPage from './pages/SalesPage'
 import NewSalePage from './pages/NewSalePage'
 import SaleDetailPage from './pages/SaleDetailPage'
+import AccountingPage from './pages/AccountingPage'
+import ProfitReportPage from './pages/ProfitReportPage'
+import AddExpensePage from './pages/AddExpensePage'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -78,6 +81,10 @@ export default function App() {
           <Route path="/suppliers/:id/statement" element={<SupplierStatementPage />} />
           <Route path="/suppliers/:id/pay" element={<AddPaymentPage />} />
           <Route path="/purchases/new" element={<AddPurchasePage />} />
+          {/* Accounting */}
+          <Route path="/accounting" element={<AccountingPage key={langKey} />} />
+          <Route path="/profit-report" element={<ProfitReportPage />} />
+          <Route path="/expenses/new" element={<AddExpensePage />} />
           {/* Settings */}
           <Route path="/settings" element={<SettingsPage key={langKey} onLangChange={() => setLangKey(k => k + 1)} />} />
           <Route path="/login" element={<Navigate to="/" replace />} />

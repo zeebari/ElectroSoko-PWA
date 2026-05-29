@@ -5,7 +5,8 @@ import { t, formatCurrency, formatDate } from '../lib/i18n'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null)
-  const [recentPlans, setRecentPlans] = useState([])
+  const [financial, setFinancial] = useState(null)
+  const [recentSales, setRecentSales] = useState([])
   const [alerts, setAlerts] = useState({ lowStock: [], supplierDebts: [] })
   const [loading, setLoading] = useState(true)
 
@@ -17,25 +18,73 @@ export default function DashboardPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const [customersRes, plansRes, productsRes, suppliersRes, purchasesRes, paymentsRes] = await Promise.all([
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+
+    const [
+      customersRes,
+      productsRes,
+      suppliersRes,
+      purchasesRes,
+      paymentsRes,
+      monthlySalesRes,
+      todaySalesRes,
+      monthlyExpensesRes,
+      recentSalesRes,
+    ] = await Promise.all([
       supabase.from('customers').select('id').eq('user_id', user.id),
-      supabase.from('plans').select('*').eq('user_id', user.id),
       supabase.from('products').select('id,name,quantity,min_quantity').eq('user_id', user.id),
       supabase.from('suppliers').select('id,name,currency').eq('user_id', user.id),
       supabase.from('supplier_purchases').select('supplier_id,total_amount').eq('user_id', user.id),
       supabase.from('supplier_payments').select('supplier_id,amount').eq('user_id', user.id),
+      supabase.from('sales').select('id,total_amount,currency,created_at').eq('user_id', user.id).gte('created_at', monthStart).lte('created_at', monthEnd),
+      supabase.from('sales').select('id,total_amount,currency').eq('user_id', user.id).gte('created_at', todayStart).lte('created_at', todayEnd),
+      supabase.from('expenses').select('amount,currency').eq('user_id', user.id).gte('created_at', monthStart).lte('created_at', monthEnd),
+      supabase.from('sales').select('id,total_amount,currency,created_at,customer_id').eq('user_id', user.id).order('created_at', { ascending: false }).limit(3),
     ])
 
-    const plans = plansRes.data || []
-    const today = new Date().toISOString().split('T')[0]
+    const toIQD = (amt, cur) => parseFloat(amt || 0) * (cur === 'USD' ? 1300 : 1)
+
+    // Monthly financial calcs
+    const monthlySales = monthlySalesRes.data || []
+    const monthlyRevenue = monthlySales.reduce((s, x) => s + toIQD(x.total_amount, x.currency), 0)
+
+    // COGS for month
+    const saleIds = monthlySales.map(s => s.id)
+    let monthlyCogs = 0
+    if (saleIds.length > 0) {
+      const { data: saleItems } = await supabase.from('sale_items')
+        .select('quantity, product_id')
+        .in('sale_id', saleIds)
+      if (saleItems && saleItems.length > 0) {
+        const productIds = [...new Set(saleItems.map(i => i.product_id).filter(Boolean))]
+        let purchasePrices = {}
+        if (productIds.length > 0) {
+          const { data: products } = await supabase.from('products').select('id, purchase_price').in('id', productIds)
+          ;(products || []).forEach(p => { purchasePrices[p.id] = parseFloat(p.purchase_price || 0) })
+        }
+        monthlyCogs = saleItems.reduce((s, item) => {
+          return s + (purchasePrices[item.product_id] || 0) * parseFloat(item.quantity || 0)
+        }, 0)
+      }
+    }
+
+    const monthlyExpenses = (monthlyExpensesRes.data || []).reduce((s, e) => s + toIQD(e.amount, e.currency), 0)
+    const monthlyNetProfit = monthlyRevenue - monthlyCogs - monthlyExpenses
+
+    // Today's revenue
+    const todaySales = todaySalesRes.data || []
+    const todayRevenue = todaySales.reduce((s, x) => s + toIQD(x.total_amount, x.currency), 0)
 
     // Low stock alerts
-    const lowStockProducts = (productsRes.data || []).filter(p =>
-      p.quantity <= (p.min_quantity || 0) && p.min_quantity > 0
-    )
+    const lowStockProducts = (productsRes.data || []).filter(p => p.quantity <= (p.min_quantity || 0) && p.min_quantity > 0)
     const outOfStockProducts = (productsRes.data || []).filter(p => p.quantity <= 0)
 
-    // Supplier debt alerts
+    // Supplier debt
     const purchasesBySupplier = {}
     ;(purchasesRes.data || []).forEach(p => {
       purchasesBySupplier[p.supplier_id] = (purchasesBySupplier[p.supplier_id] || 0) + parseFloat(p.total_amount || 0)
@@ -45,55 +94,23 @@ export default function DashboardPage() {
       paymentsBySupplier[p.supplier_id] = (paymentsBySupplier[p.supplier_id] || 0) + parseFloat(p.amount || 0)
     })
     const supplierDebts = (suppliersRes.data || [])
-      .map(s => ({
-        ...s,
-        balance: (purchasesBySupplier[s.id] || 0) - (paymentsBySupplier[s.id] || 0),
-      }))
+      .map(s => ({ ...s, balance: (purchasesBySupplier[s.id] || 0) - (paymentsBySupplier[s.id] || 0) }))
       .filter(s => s.balance > 0)
       .sort((a, b) => b.balance - a.balance)
 
-    // Plans: overdue installments
-    let overdueCount = 0
-    plans.forEach(p => {
-      const schedule = p.schedule || []
-      schedule.filter(s => !s.paid && s.dueDate && s.dueDate < today).forEach(() => overdueCount++)
-    })
-
-    // Customer outstanding
-    const plansWithCustomers = await Promise.all(
-      plans.slice(0, 5).map(async (p) => {
-        const { data: cust } = await supabase.from('customers').select('name, currency').eq('id', p.customerId).single()
-        return { ...p, customerName: cust?.name, currency: cust?.currency || 'IQD' }
+    // Recent sales with customer names
+    const latestSales = recentSalesRes.data || []
+    const salesWithCustomers = await Promise.all(
+      latestSales.map(async (sale) => {
+        if (!sale.customer_id) return { ...sale, customerName: 'زبون غير محدد' }
+        const { data: cust } = await supabase.from('customers').select('name').eq('id', sale.customer_id).single()
+        return { ...sale, customerName: cust?.name || 'زبون' }
       })
     )
 
-    const { data: paymentsAll } = await supabase.from('payments').select('amount, planId').eq('user_id', user.id)
-    const paidByPlan = {}
-    ;(paymentsAll || []).forEach(p => {
-      paidByPlan[p.planId] = (paidByPlan[p.planId] || 0) + parseFloat(p.amount || 0)
-    })
-
-    const { data: custsData } = await supabase.from('customers').select('id, currency').eq('user_id', user.id)
-    const allCustomers = {}
-    ;(custsData || []).forEach(c => { allCustomers[c.id] = c })
-
-    let totalOutstandingIQD = 0, totalOutstandingUSD = 0
-    plans.forEach(p => {
-      const currency = allCustomers[p.customerId]?.currency || 'IQD'
-      const paid = paidByPlan[p.id] || 0
-      const remaining = Math.max(0, parseFloat(p.totalAmount || 0) + parseFloat(p.totalInterest || 0) - parseFloat(p.downPayment || 0) - paid)
-      if (currency === 'USD') totalOutstandingUSD += remaining
-      else totalOutstandingIQD += remaining
-    })
-
-    setStats({
-      customers: customersRes.data?.length || 0,
-      plans: plans.length,
-      outstandingIQD: totalOutstandingIQD,
-      outstandingUSD: totalOutstandingUSD,
-      overdue: overdueCount,
-    })
-    setRecentPlans(plansWithCustomers)
+    setStats({ customers: customersRes.data?.length || 0 })
+    setFinancial({ todayRevenue, monthlyRevenue, monthlyExpenses, monthlyNetProfit })
+    setRecentSales(salesWithCustomers)
     setAlerts({
       lowStock: [...outOfStockProducts, ...lowStockProducts.filter(p => p.quantity > 0)],
       supplierDebts,
@@ -103,11 +120,59 @@ export default function DashboardPage() {
 
   if (loading) return <div className="flex items-center justify-center h-64 text-slate-400">{t('loading')}</div>
 
+  const isProfit = financial.monthlyNetProfit >= 0
+
   return (
     <div className="p-4 space-y-4" dir="rtl">
-      <h1 className="text-xl font-bold text-slate-800">{t('dashboard')}</h1>
 
-      {/* Alerts Section */}
+      {/* Hero: Today's Revenue + Net Profit */}
+      <div className="bg-gradient-to-br from-slate-900 to-blue-900 rounded-2xl p-5 text-white shadow-md">
+        <p className="text-xs opacity-60 mb-3 font-medium tracking-wide uppercase">لوحة اليوم</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs opacity-70">إيرادات اليوم</p>
+            <p className="text-2xl font-extrabold mt-0.5" style={{ letterSpacing: '-0.5px' }}>
+              {formatCurrency(financial.todayRevenue, 'IQD')}
+            </p>
+          </div>
+          <div className="h-10 w-px bg-white/20" />
+          <div>
+            <p className="text-xs opacity-70">صافي الربح (الشهر)</p>
+            <p className={`text-2xl font-extrabold mt-0.5 ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}
+              style={{ letterSpacing: '-0.5px' }}>
+              {isProfit ? '+' : ''}{formatCurrency(financial.monthlyNetProfit, 'IQD')}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Summary Strip */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+        <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">ملخص الشهر</p>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div>
+            <p className="text-base font-extrabold text-slate-800" style={{ letterSpacing: '-0.5px' }}>
+              {formatCurrency(financial.monthlyRevenue, 'IQD')}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">إيرادات</p>
+          </div>
+          <div>
+            <p className="text-base font-extrabold text-amber-600" style={{ letterSpacing: '-0.5px' }}>
+              {formatCurrency(financial.monthlyExpenses, 'IQD')}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">مصاريف</p>
+          </div>
+          <div>
+            <p className={`text-base font-extrabold ${isProfit ? 'text-emerald-600' : 'text-red-600'}`}
+              style={{ letterSpacing: '-0.5px' }}>
+              {isProfit ? '+' : ''}{formatCurrency(financial.monthlyNetProfit, 'IQD')}
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">صافي الربح</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Alert: Low Stock */}
       {alerts.lowStock.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-2">
           <div className="flex items-center gap-2">
@@ -140,6 +205,7 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Alert: Supplier Debts */}
       {alerts.supplierDebts.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 space-y-2">
           <div className="flex items-center gap-2">
@@ -168,105 +234,68 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label={t('totalCustomers')}
-          value={stats?.customers ?? 0}
-          color="blue"
-          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>}
-        />
-        <StatCard
-          label={t('totalPlans')}
-          value={stats?.plans ?? 0}
-          color="purple"
-          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>}
-        />
-        <StatCard
-          label={`${t('outstanding')} (IQD)`}
-          value={formatCurrency(stats?.outstandingIQD, 'IQD')}
-          color="orange"
-          small
-          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
-        />
-        <StatCard
-          label={`${t('outstanding')} (USD)`}
-          value={formatCurrency(stats?.outstandingUSD, 'USD')}
-          color="green"
-          small
-          icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
-        />
-      </div>
-
-      {/* Overdue Alert */}
-      {stats?.overdue > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          </div>
-          <div>
-            <p className="font-semibold text-red-800 text-sm">{stats.overdue} قسط متأخر</p>
-            <Link to="/plans?filter=overdue" className="text-red-600 text-xs hover:underline">{t('viewDetails')} ←</Link>
-          </div>
-        </div>
-      )}
-
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/customers/new"
-          className="flex items-center gap-2 bg-blue-600 text-white rounded-2xl p-4 shadow-sm hover:bg-blue-700 active:scale-95 transition-all">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-          <span className="text-sm font-semibold">{t('addCustomer')}</span>
+      <div className="grid grid-cols-3 gap-3">
+        <Link to="/sales/new"
+          className="flex flex-col items-center gap-1.5 bg-emerald-600 text-white rounded-2xl py-4 shadow-sm hover:bg-emerald-700 active:scale-95 transition-all">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+          <span className="text-xs font-semibold">بيع جديد</span>
         </Link>
-        <Link to="/plans/new"
-          className="flex items-center gap-2 bg-slate-700 text-white rounded-2xl p-4 shadow-sm hover:bg-slate-800 active:scale-95 transition-all">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-          <span className="text-sm font-semibold">{t('addPlan')}</span>
+        <Link to="/expenses/new"
+          className="flex flex-col items-center gap-1.5 bg-amber-500 text-white rounded-2xl py-4 shadow-sm hover:bg-amber-600 active:scale-95 transition-all">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
+          </svg>
+          <span className="text-xs font-semibold">تسجيل مصروف</span>
+        </Link>
+        <Link to="/customers/new"
+          className="flex flex-col items-center gap-1.5 bg-blue-600 text-white rounded-2xl py-4 shadow-sm hover:bg-blue-700 active:scale-95 transition-all">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+          </svg>
+          <span className="text-xs font-semibold">زبون جديد</span>
         </Link>
       </div>
 
-      {/* Recent Plans */}
-      {recentPlans.length > 0 && (
+      {/* Link to Full Accounting */}
+      <Link to="/accounting"
+        className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 shadow-sm border border-slate-100 hover:bg-slate-50 transition-colors">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </div>
+          <span className="text-sm font-semibold text-slate-800">عرض التقرير المالي الكامل</span>
+        </div>
+        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+        </svg>
+      </Link>
+
+      {/* Recent Sales */}
+      {recentSales.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-semibold text-slate-800 text-sm">آخر العقود</h3>
-            <Link to="/plans" className="text-blue-600 text-xs">{t('viewDetails')}</Link>
+            <h3 className="font-semibold text-slate-800 text-sm">آخر المبيعات</h3>
+            <Link to="/sales" className="text-blue-600 text-xs">{t('viewDetails')}</Link>
           </div>
           <div className="divide-y divide-slate-50">
-            {recentPlans.map(plan => (
-              <Link key={plan.id} to={`/plans/${plan.id}`}
+            {recentSales.map(sale => (
+              <Link key={sale.id} to={`/sales/${sale.id}`}
                 className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 active:bg-slate-100 transition-colors">
                 <div>
-                  <p className="font-medium text-slate-800 text-sm">{plan.customerName || '—'}</p>
-                  <p className="text-xs text-slate-500">{plan.description}</p>
+                  <p className="font-medium text-slate-800 text-sm">{sale.customerName}</p>
+                  <p className="text-xs text-slate-400">{formatDate(sale.created_at)}</p>
                 </div>
-                <div className="text-left">
-                  <p className="font-semibold text-blue-700 text-sm">{formatCurrency(plan.totalAmount, plan.currency)}</p>
-                  <p className="text-xs text-slate-400">{formatDate(plan.startDate)}</p>
-                </div>
+                <p className="font-semibold text-blue-700 text-sm">{formatCurrency(sale.total_amount, sale.currency)}</p>
               </Link>
             ))}
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-function StatCard({ label, value, color, icon, small }) {
-  const colors = {
-    blue: 'bg-blue-50 text-blue-600',
-    purple: 'bg-purple-50 text-purple-600',
-    orange: 'bg-orange-50 text-orange-600',
-    green: 'bg-green-50 text-green-600',
-  }
-  return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${colors[color]}`}>
-        {icon}
-      </div>
-      <p className={`font-bold text-slate-800 ${small ? 'text-base' : 'text-2xl'}`}>{value}</p>
-      <p className="text-xs text-slate-500 mt-0.5">{label}</p>
     </div>
   )
 }

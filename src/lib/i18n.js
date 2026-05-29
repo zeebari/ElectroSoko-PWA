@@ -77,6 +77,10 @@ const translations = {
     inventory: 'الجرد',
     suppliers: 'الشركات',
     sales: 'المبيعات',
+    accounting: 'المحاسبة',
+    expenses: 'المصاريف',
+    revenue: 'الإيرادات',
+    netProfit: 'صافي الربح',
   },
   ku_sorani: {
     appName: 'ئەلیکترۆ سوقو',
@@ -156,6 +160,10 @@ const translations = {
     inventory: 'ژمارکردن',
     suppliers: 'کۆمپانیاکان',
     sales: 'فرۆشتنەکان',
+    accounting: 'ژمێریاری',
+    expenses: 'خەرجی',
+    revenue: 'داهات',
+    netProfit: 'قازانجی سافی',
   },
   ku_badini: {
     appName: 'ئەلیکترۆ سوقو',
@@ -235,6 +243,10 @@ const translations = {
     inventory: 'ژمارکردن',
     suppliers: 'کۆمپانیاکان',
     sales: 'فرۆشتنەکان',
+    accounting: 'ژمێریاری',
+    expenses: 'خەرج',
+    revenue: 'داهات',
+    netProfit: 'قازانجی سافی',
   },
 }
 
