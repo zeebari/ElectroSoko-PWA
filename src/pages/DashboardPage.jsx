@@ -6,7 +6,7 @@ import { t, formatCurrency, formatDate } from '../lib/i18n'
 export default function DashboardPage() {
   const [stats, setStats] = useState(null)
   const [recentPlans, setRecentPlans] = useState([])
-  const [overduePlans, setOverduePlans] = useState([])
+  const [alerts, setAlerts] = useState({ lowStock: [], supplierDebts: [] })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -17,18 +17,49 @@ export default function DashboardPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const [customersRes, plansRes] = await Promise.all([
+    const [customersRes, plansRes, productsRes, suppliersRes, purchasesRes, paymentsRes] = await Promise.all([
       supabase.from('customers').select('id').eq('user_id', user.id),
       supabase.from('plans').select('*').eq('user_id', user.id),
+      supabase.from('products').select('id,name,quantity,min_quantity').eq('user_id', user.id),
+      supabase.from('suppliers').select('id,name,currency').eq('user_id', user.id),
+      supabase.from('supplier_purchases').select('supplier_id,total_amount').eq('user_id', user.id),
+      supabase.from('supplier_payments').select('supplier_id,amount').eq('user_id', user.id),
     ])
 
     const plans = plansRes.data || []
     const today = new Date().toISOString().split('T')[0]
 
-    // Calculate stats
-    let totalOutstandingIQD = 0, totalOutstandingUSD = 0
-    let overdueCount = 0
+    // Low stock alerts
+    const lowStockProducts = (productsRes.data || []).filter(p =>
+      p.quantity <= (p.min_quantity || 0) && p.min_quantity > 0
+    )
+    const outOfStockProducts = (productsRes.data || []).filter(p => p.quantity <= 0)
 
+    // Supplier debt alerts
+    const purchasesBySupplier = {}
+    ;(purchasesRes.data || []).forEach(p => {
+      purchasesBySupplier[p.supplier_id] = (purchasesBySupplier[p.supplier_id] || 0) + parseFloat(p.total_amount || 0)
+    })
+    const paymentsBySupplier = {}
+    ;(paymentsRes.data || []).forEach(p => {
+      paymentsBySupplier[p.supplier_id] = (paymentsBySupplier[p.supplier_id] || 0) + parseFloat(p.amount || 0)
+    })
+    const supplierDebts = (suppliersRes.data || [])
+      .map(s => ({
+        ...s,
+        balance: (purchasesBySupplier[s.id] || 0) - (paymentsBySupplier[s.id] || 0),
+      }))
+      .filter(s => s.balance > 0)
+      .sort((a, b) => b.balance - a.balance)
+
+    // Plans: overdue installments
+    let overdueCount = 0
+    plans.forEach(p => {
+      const schedule = p.schedule || []
+      schedule.filter(s => !s.paid && s.dueDate && s.dueDate < today).forEach(() => overdueCount++)
+    })
+
+    // Customer outstanding
     const plansWithCustomers = await Promise.all(
       plans.slice(0, 5).map(async (p) => {
         const { data: cust } = await supabase.from('customers').select('name, currency').eq('id', p.customerId).single()
@@ -36,31 +67,17 @@ export default function DashboardPage() {
       })
     )
 
-    plans.forEach(p => {
-      const totalPaid = 0 // will compute from payments if needed
-      const schedule = p.schedule || []
-      const unpaidInstallments = schedule.filter(s => !s.paid)
-      unpaidInstallments.forEach(s => {
-        if (s.dueDate && s.dueDate < today) overdueCount++
-      })
-    })
-
-    // Get payments sum
-    const { data: paymentsRes } = await supabase
-      .from('payments')
-      .select('amount, planId')
-      .eq('user_id', user.id)
-
+    const { data: paymentsAll } = await supabase.from('payments').select('amount, planId').eq('user_id', user.id)
     const paidByPlan = {}
-    ;(paymentsRes || []).forEach(p => {
+    ;(paymentsAll || []).forEach(p => {
       paidByPlan[p.planId] = (paidByPlan[p.planId] || 0) + parseFloat(p.amount || 0)
     })
 
-    // Compute outstanding per plan using customer currency
-    const allCustomers = {}
     const { data: custsData } = await supabase.from('customers').select('id, currency').eq('user_id', user.id)
+    const allCustomers = {}
     ;(custsData || []).forEach(c => { allCustomers[c.id] = c })
 
+    let totalOutstandingIQD = 0, totalOutstandingUSD = 0
     plans.forEach(p => {
       const currency = allCustomers[p.customerId]?.currency || 'IQD'
       const paid = paidByPlan[p.id] || 0
@@ -77,6 +94,10 @@ export default function DashboardPage() {
       overdue: overdueCount,
     })
     setRecentPlans(plansWithCustomers)
+    setAlerts({
+      lowStock: [...outOfStockProducts, ...lowStockProducts.filter(p => p.quantity > 0)],
+      supplierDebts,
+    })
     setLoading(false)
   }
 
@@ -85,6 +106,67 @@ export default function DashboardPage() {
   return (
     <div className="p-4 space-y-4" dir="rtl">
       <h1 className="text-xl font-bold text-slate-800">{t('dashboard')}</h1>
+
+      {/* Alerts Section */}
+      {alerts.lowStock.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              </svg>
+            </div>
+            <p className="font-semibold text-red-800 text-sm">
+              {alerts.lowStock.filter(p => p.quantity <= 0).length > 0
+                ? `${alerts.lowStock.filter(p => p.quantity <= 0).length} مادة نفدت من المخزن`
+                : `${alerts.lowStock.length} مادة بمخزون منخفض`}
+            </p>
+          </div>
+          <div className="space-y-1">
+            {alerts.lowStock.slice(0, 3).map(p => (
+              <div key={p.id} className="flex items-center justify-between">
+                <Link to={`/products/${p.id}`} className="text-xs text-red-700 hover:underline">{p.name}</Link>
+                <span className={`text-xs font-bold ${p.quantity <= 0 ? 'text-red-700' : 'text-orange-600'}`}>
+                  {p.quantity <= 0 ? 'نفد' : `${p.quantity} قطعة`}
+                </span>
+              </div>
+            ))}
+            {alerts.lowStock.length > 3 && (
+              <Link to="/products" className="text-xs text-red-600 hover:underline block mt-1">
+                + {alerts.lowStock.length - 3} أخرى — عرض المخزن
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {alerts.supplierDebts.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+              </svg>
+            </div>
+            <p className="font-semibold text-orange-800 text-sm">
+              {alerts.supplierDebts.length} شركة لديها رصيد مستحق
+            </p>
+          </div>
+          <div className="space-y-1">
+            {alerts.supplierDebts.slice(0, 3).map(s => (
+              <div key={s.id} className="flex items-center justify-between">
+                <Link to={`/suppliers/${s.id}`} className="text-xs text-orange-700 hover:underline">{s.name}</Link>
+                <span className="text-xs font-bold text-orange-700">{formatCurrency(s.balance, s.currency)}</span>
+              </div>
+            ))}
+            {alerts.supplierDebts.length > 3 && (
+              <Link to="/suppliers" className="text-xs text-orange-600 hover:underline block mt-1">
+                + {alerts.supplierDebts.length - 3} أخرى — عرض الشركات
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 gap-3">
