@@ -12,6 +12,9 @@ import AddPlanPage from './pages/AddPlanPage'
 import PlanDetailPage from './pages/PlanDetailPage'
 import PaymentsPage from './pages/PaymentsPage'
 import SettingsPage from './pages/SettingsPage'
+import ProductsPage from './pages/ProductsPage'
+import AddProductPage from './pages/AddProductPage'
+import ProductDetailPage from './pages/ProductDetailPage'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -45,6 +48,10 @@ export default function App() {
           <Route path="/plans/new" element={<AddPlanPage />} />
           <Route path="/plans/:id" element={<PlanDetailPage />} />
           <Route path="/payments" element={<PaymentsPage key={langKey} />} />
+          <Route path="/products" element={<ProductsPage key={langKey} />} />
+          <Route path="/products/new" element={<AddProductPage />} />
+          <Route path="/products/:id" element={<ProductDetailPage />} />
+          <Route path="/products/:id/edit" element={<AddProductPage />} />
           <Route path="/settings" element={<SettingsPage key={langKey} onLangChange={() => setLangKey(k => k + 1)} />} />
           <Route path="/login" element={<Navigate to="/" replace />} />
         </Routes>

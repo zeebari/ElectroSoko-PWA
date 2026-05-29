@@ -72,6 +72,9 @@ const translations = {
     totalPaid: 'إجمالي المدفوع',
     nextInstallment: 'القسط القادم',
     language: 'اللغة',
+    products: 'المخزن',
+    addProduct: 'مادة جديدة',
+    inventory: 'الجرد',
   },
   ku_sorani: {
     appName: 'ئەلیکترۆ سوقو',
@@ -146,6 +149,9 @@ const translations = {
     totalPaid: 'کۆی دراوە',
     nextInstallment: 'قیستی داهاتوو',
     language: 'زمان',
+    products: 'کۆگا',
+    addProduct: 'کاڵای نوێ',
+    inventory: 'ژمارکردن',
   },
   ku_badini: {
     appName: 'ئەلیکترۆ سوقو',
@@ -220,6 +226,9 @@ const translations = {
     totalPaid: 'کۆی دراوە',
     nextInstallment: 'قستی داهاتوو',
     language: 'زمان',
+    products: 'مالخانه‌',
+    addProduct: 'شتەمەنی نوێ',
+    inventory: 'ژمارکردن',
   },
 }
 
