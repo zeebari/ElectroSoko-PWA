@@ -3,22 +3,38 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { t, formatCurrency, formatDate } from '../lib/i18n'
 
+const TYPE_LABELS = {
+  cash: { label: 'نقد', emoji: '💵', bg: 'bg-green-100', text: 'text-green-700' },
+  credit: { label: 'دين', emoji: '📋', bg: 'bg-orange-100', text: 'text-orange-700' },
+  installments: { label: 'أقساط', emoji: '📅', bg: 'bg-blue-100', text: 'text-blue-700' },
+}
+
 export default function CustomerDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [customer, setCustomer] = useState(null)
   const [plans, setPlans] = useState([])
+  const [sales, setSales] = useState([])
+  const [paidBySale, setPaidBySale] = useState({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { loadData() }, [id])
 
   async function loadData() {
-    const [{ data: cust }, { data: plansData }] = await Promise.all([
+    const [{ data: cust }, { data: plansData }, { data: salesData }, { data: salePayments }] = await Promise.all([
       supabase.from('customers').select('*').eq('id', id).single(),
       supabase.from('plans').select('*').eq('customerId', id).order('createdAt', { ascending: false }),
+      supabase.from('sales').select('*, items:sale_items(*)').eq('customer_id', id).order('created_at', { ascending: false }),
+      supabase.from('sale_payments').select('sale_id,amount').eq('user_id', (await supabase.auth.getUser()).data.user?.id),
     ])
     setCustomer(cust)
     setPlans(plansData || [])
+    setSales((salesData || []).filter(s => s.payment_type !== 'installments')) // installments shown in plans section
+    const paidMap = {}
+    ;(salePayments || []).forEach(p => {
+      paidMap[p.sale_id] = (paidMap[p.sale_id] || 0) + parseFloat(p.amount || 0)
+    })
+    setPaidBySale(paidMap)
     setLoading(false)
   }
 
@@ -32,12 +48,16 @@ export default function CustomerDetailPage() {
   if (!customer) return <div className="p-4 text-slate-400">العميل غير موجود</div>
 
   const currency = customer.currency || 'IQD'
-  const totalOutstanding = plans.reduce((sum, p) => sum + Math.max(0, parseFloat(p.totalAmount || 0) + parseFloat(p.totalInterest || 0) - parseFloat(p.downPayment || 0)), 0)
+
+  const creditSales = sales.filter(s => s.payment_type === 'credit')
+  const totalCreditOutstanding = creditSales.reduce((sum, s) => sum + Math.max(0, parseFloat(s.total_amount) - (paidBySale[s.id] || 0)), 0)
+  const totalInstallments = plans.reduce((sum, p) => sum + Math.max(0, parseFloat(p.totalAmount || 0) + parseFloat(p.totalInterest || 0) - parseFloat(p.downPayment || 0)), 0)
+  const totalOutstanding = totalCreditOutstanding + totalInstallments
 
   const whatsappMsg = encodeURIComponent(
-    `مرحباً ${customer.name} 👋\nكشف حساب من إلكترو سوقو\nالتاريخ: ${formatDate(new Date().toISOString())}\n─────────────────\nإجمالي الأقساط: ${plans.length}\nالمبلغ المستحق: ${formatCurrency(totalOutstanding, currency)}\n─────────────────\nشكراً لتعاملكم معنا 🙏`
+    `مرحباً ${customer.name} 👋\nكشف حساب من إلكترو سوقو\nالتاريخ: ${formatDate(new Date().toISOString())}\n─────────────────\nالديون المستحقة: ${formatCurrency(totalCreditOutstanding, currency)}\nأقساط: ${formatCurrency(totalInstallments, currency)}\nالإجمالي المستحق: ${formatCurrency(totalOutstanding, currency)}\n─────────────────\nشكراً لتعاملكم معنا 🙏`
   )
-  const waLink = `https://wa.me/${customer.phone?.replace(/[^0-9]/g, '')}?text=${whatsappMsg}`
+  const waLink = customer.phone ? `https://wa.me/${customer.phone.replace(/[^0-9]/g, '')}?text=${whatsappMsg}` : null
 
   return (
     <div className="p-4 space-y-4" dir="rtl">
@@ -46,7 +66,7 @@ export default function CustomerDetailPage() {
         <button onClick={() => navigate(-1)} className="p-2 rounded-xl hover:bg-slate-100 text-slate-600">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
         </button>
-        <h1 className="text-xl font-bold text-slate-800">بيانات العميل</h1>
+        <h1 className="text-xl font-bold text-slate-800">بيانات الزبون</h1>
       </div>
 
       {/* Customer Card */}
@@ -90,31 +110,87 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
+        {/* Outstanding balance */}
+        {totalOutstanding > 0 && (
+          <div className="mt-4 bg-orange-50 border border-orange-100 rounded-xl p-3 flex justify-between items-center">
+            <span className="text-sm text-orange-700 font-medium">إجمالي المستحق</span>
+            <span className="font-bold text-orange-800">{formatCurrency(totalOutstanding, currency)}</span>
+          </div>
+        )}
+
         {/* Action Buttons */}
         <div className="mt-4 grid grid-cols-2 gap-2">
-          {customer.phone && (
+          <Link to={`/sales/new?customerId=${customer.id}`}
+            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+            بيع جديد
+          </Link>
+          {waLink ? (
             <a href={waLink} target="_blank" rel="noreferrer"
               className="flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors">
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
               {t('whatsapp')}
             </a>
+          ) : (
+            <Link to={`/plans/new?customerId=${customer.id}`}
+              className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+              {t('addPlan')}
+            </Link>
           )}
-          <Link to={`/plans/new?customerId=${customer.id}`}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2.5 rounded-xl text-xs font-semibold transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-            {t('addPlan')}
-          </Link>
         </div>
       </div>
 
-      {/* Plans */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100">
-          <h3 className="font-semibold text-slate-800 text-sm">{t('plans')} ({plans.length})</h3>
+      {/* Sales Section */}
+      {sales.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="font-semibold text-slate-800 text-sm">المبيعات ({sales.length})</h3>
+            <Link to={`/sales/new?customerId=${id}`} className="text-blue-600 text-xs">+ جديد</Link>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {sales.map(sale => {
+              const paid = paidBySale[sale.id] || 0
+              const remaining = Math.max(0, parseFloat(sale.total_amount) - paid)
+              const typeInfo = TYPE_LABELS[sale.payment_type] || TYPE_LABELS.cash
+              return (
+                <Link key={sale.id} to={`/sales/${sale.id}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${typeInfo.bg} ${typeInfo.text}`}>
+                        {typeInfo.emoji} {typeInfo.label}
+                      </span>
+                      <span className="text-xs text-slate-400">{formatDate(sale.date)}</span>
+                    </div>
+                    {sale.notes && <p className="text-xs text-slate-500">{sale.notes}</p>}
+                    {sale.items?.length > 0 && (
+                      <p className="text-xs text-slate-500">{sale.items.map(i => i.product_name).join(', ')}</p>
+                    )}
+                  </div>
+                  <div className="text-left shrink-0 mr-3">
+                    <p className="font-bold text-slate-800 text-sm">{formatCurrency(sale.total_amount, currency)}</p>
+                    {sale.payment_type === 'credit' && remaining > 0 && (
+                      <p className="text-xs text-orange-600">متبقي: {formatCurrency(remaining, currency)}</p>
+                    )}
+                    {sale.payment_type === 'credit' && remaining <= 0 && (
+                      <p className="text-xs text-green-600">مسدد ✓</p>
+                    )}
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </div>
-        {plans.length === 0 ? (
-          <div className="px-4 py-8 text-center text-slate-400 text-sm">{t('noData')}</div>
-        ) : (
+      )}
+
+      {/* Plans / Installments */}
+      {plans.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="font-semibold text-slate-800 text-sm">{t('plans')} ({plans.length})</h3>
+            <Link to={`/sales/new?customerId=${id}`} className="text-blue-600 text-xs">+ جديد</Link>
+          </div>
           <div className="divide-y divide-slate-50">
             {plans.map(plan => {
               const schedule = plan.schedule || []
@@ -141,8 +217,18 @@ export default function CustomerDetailPage() {
               )
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {sales.length === 0 && plans.length === 0 && (
+        <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-100">
+          <p className="text-slate-400 text-sm mb-3">لا توجد معاملات بعد</p>
+          <Link to={`/sales/new?customerId=${id}`}
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-semibold">
+            + بيع جديد
+          </Link>
+        </div>
+      )}
 
       {/* Delete */}
       <button onClick={handleDelete}

@@ -76,6 +76,7 @@ const translations = {
     addProduct: 'مادة جديدة',
     inventory: 'الجرد',
     suppliers: 'الشركات',
+    sales: 'المبيعات',
   },
   ku_sorani: {
     appName: 'ئەلیکترۆ سوقو',
@@ -154,6 +155,7 @@ const translations = {
     addProduct: 'کاڵای نوێ',
     inventory: 'ژمارکردن',
     suppliers: 'کۆمپانیاکان',
+    sales: 'فرۆشتنەکان',
   },
   ku_badini: {
     appName: 'ئەلیکترۆ سوقو',
@@ -232,6 +234,7 @@ const translations = {
     addProduct: 'شتەمەنی نوێ',
     inventory: 'ژمارکردن',
     suppliers: 'کۆمپانیاکان',
+    sales: 'فرۆشتنەکان',
   },
 }
 
