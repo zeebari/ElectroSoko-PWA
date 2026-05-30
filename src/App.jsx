@@ -46,10 +46,10 @@ export default function App() {
     )
   }
 
-  if (!session) return <BrowserRouter><Routes><Route path="*" element={<LoginPage />} /></Routes></BrowserRouter>
+  if (!session) return <BrowserRouter basename="/ElectroSoko-PWA"><Routes><Route path="*" element={<LoginPage />} /></Routes></BrowserRouter>
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/ElectroSoko-PWA">
       <Layout>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
