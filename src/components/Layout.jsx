@@ -5,10 +5,22 @@ import { t } from '../lib/i18n'
 const navItems = [
   { to: '/', label: 'dashboard', icon: HomeIcon },
   { to: '/sales', label: 'sales', icon: CartIcon },
-  { to: '/accounting', label: 'accounting', icon: ChartIcon },
-  { to: '/suppliers', label: 'suppliers', icon: BuildingIcon },
   { to: '/customers', label: 'customers', icon: UsersIcon },
+  { to: '/plans', label: 'plans', icon: DocumentIcon },
+  { to: '/suppliers', label: 'suppliers', icon: BuildingIcon },
+  { to: '/accounting', label: 'accounting', icon: ChartIcon },
+  { to: '/products', label: 'products', icon: BoxIcon },
 ]
+
+const NAV_LABELS = {
+  dashboard: 'لوحة التحكم',
+  sales: 'المبيعات',
+  customers: 'الزبائن',
+  plans: 'الأقساط',
+  suppliers: 'الشركات',
+  accounting: 'المحاسبة',
+  products: 'المخزن',
+}
 
 export default function Layout({ children }) {
   const navigate = useNavigate()
@@ -19,47 +31,76 @@ export default function Layout({ children }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-100" dir="rtl">
-      {/* Top Bar */}
-      <header className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+    <div className="flex min-h-screen bg-slate-50" dir="rtl">
+      {/* Dark Sidebar — fixed on the right (RTL) */}
+      <aside className="fixed top-0 right-0 h-full w-56 bg-[#0f172a] flex flex-col z-50">
+        {/* Logo */}
+        <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-700/50">
+          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
           </div>
-          <span className="font-bold text-sm">إلكترو سوقو</span>
+          <span className="font-bold text-white text-sm">إلكترو سوقو</span>
         </div>
-        <button onClick={handleLogout} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-          </svg>
-        </button>
-      </header>
 
-      {/* Page Content */}
-      <main className="flex-1 pb-20 overflow-y-auto">
-        {children}
-      </main>
+        {/* Nav Items */}
+        <nav className="flex-1 py-4 overflow-y-auto">
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === '/'}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-5 py-2.5 mx-2 rounded-lg text-sm font-medium transition-all mb-0.5 ${
+                  isActive
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'stroke-white' : 'stroke-slate-400'}`} />
+                  <span>{NAV_LABELS[label] || t(label)}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex items-center justify-around px-2 py-1 safe-area-inset-bottom z-50 shadow-lg">
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink key={to} to={to} end={to === '/'}
-            className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all ${
-                isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
-              }`
-            }>
-            {({ isActive }) => (
-              <>
-                <Icon className={`w-6 h-6 ${isActive ? 'stroke-blue-600' : 'stroke-slate-400'}`} />
-                <span className="text-[10px] font-medium">{t(label)}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+        {/* Logout */}
+        <div className="px-4 py-4 border-t border-slate-700/50">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-700/50 hover:text-white transition-all"
+          >
+            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            <span>تسجيل الخروج</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main area — offset from sidebar */}
+      <div className="flex-1 flex flex-col mr-56 min-w-0">
+        {/* White top bar */}
+        <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-end shadow-sm sticky top-0 z-40">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+            </div>
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="flex-1 bg-slate-50 p-6 overflow-y-auto">
+          {children}
+        </main>
+      </div>
     </div>
   )
 }
@@ -78,4 +119,10 @@ function CartIcon({ className }) {
 }
 function ChartIcon({ className }) {
   return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+}
+function DocumentIcon({ className }) {
+  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+}
+function BoxIcon({ className }) {
+  return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
 }
