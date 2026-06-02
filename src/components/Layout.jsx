@@ -1,81 +1,96 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { t } from '../lib/i18n'
 
 const navItems = [
-  { to: '/', label: 'dashboard', icon: HomeIcon },
-  { to: '/sales', label: 'sales', icon: CartIcon },
-  { to: '/customers', label: 'customers', icon: UsersIcon },
-  { to: '/plans', label: 'plans', icon: DocumentIcon },
-  { to: '/suppliers', label: 'suppliers', icon: BuildingIcon },
-  { to: '/accounting', label: 'accounting', icon: ChartIcon },
-  { to: '/products', label: 'products', icon: BoxIcon },
+  { to: '/',           label: 'لوحة التحكم', icon: HomeIcon },
+  { to: '/sales',      label: 'المبيعات',    icon: CartIcon },
+  { to: '/customers',  label: 'الزبائن',     icon: UsersIcon },
+  { to: '/plans',      label: 'الأقساط',     icon: DocumentIcon },
+  { to: '/suppliers',  label: 'الشركات',     icon: BuildingIcon },
+  { to: '/accounting', label: 'المحاسبة',    icon: ChartIcon },
+  { to: '/products',   label: 'المخزن',      icon: BoxIcon },
 ]
 
-const NAV_LABELS = {
-  dashboard: 'لوحة التحكم',
-  sales: 'المبيعات',
-  customers: 'الزبائن',
-  plans: 'الأقساط',
-  suppliers: 'الشركات',
-  accounting: 'المحاسبة',
-  products: 'المخزن',
+function getPageTitle(pathname) {
+  if (pathname === '/') return 'لوحة التحكم'
+  const match = navItems.find(n => n.to !== '/' && pathname.startsWith(n.to))
+  return match ? match.label : 'إلكترو سوقو'
 }
 
 export default function Layout({ children }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [userEmail, setUserEmail] = useState('')
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail(data?.user?.email || '')
+    })
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
     navigate('/login')
   }
 
+  const pageTitle = getPageTitle(location.pathname)
+
   return (
-    <div className="flex min-h-screen bg-slate-50" dir="rtl">
-      {/* Dark Sidebar — fixed on the right (RTL) */}
-      <aside className="fixed top-0 right-0 h-full w-56 bg-[#0f172a] flex flex-col z-50">
+    <div className="flex min-h-screen bg-slate-100" dir="rtl">
+      {/* Sidebar */}
+      <aside className="fixed top-0 right-0 h-full w-52 bg-[#0f172a] flex flex-col z-50">
         {/* Logo */}
-        <div className="flex items-center gap-2 px-5 py-5 border-b border-slate-700/50">
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-white/10">
+          <div className="w-7 h-7 bg-blue-500 rounded-lg flex items-center justify-center shrink-0">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
           </div>
-          <span className="font-bold text-white text-sm">إلكترو سوقو</span>
+          <div>
+            <p className="font-bold text-white text-sm leading-tight">إلكترو سوقو</p>
+            <p className="text-slate-500 text-xs leading-tight">نظام المبيعات</p>
+          </div>
         </div>
 
-        {/* Nav Items */}
-        <nav className="flex-1 py-4 overflow-y-auto">
+        {/* Nav */}
+        <nav className="flex-1 py-3 overflow-y-auto space-y-0.5 px-2">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-5 py-2.5 mx-2 rounded-lg text-sm font-medium transition-all mb-0.5 ${
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                   isActive
                     ? 'bg-blue-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                    : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-100'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'stroke-white' : 'stroke-slate-400'}`} />
-                  <span>{NAV_LABELS[label] || t(label)}</span>
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'stroke-white' : 'stroke-slate-400'}`} />
+                  <span>{label}</span>
                 </>
               )}
             </NavLink>
           ))}
         </nav>
 
-        {/* Logout */}
-        <div className="px-4 py-4 border-t border-slate-700/50">
+        {/* User + Logout */}
+        <div className="px-2 py-3 border-t border-white/10">
+          <div className="flex items-center gap-2 px-3 py-2 mb-1">
+            <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-bold">{userEmail.charAt(0).toUpperCase()}</span>
+            </div>
+            <span className="text-slate-400 text-xs truncate">{userEmail}</span>
+          </div>
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-700/50 hover:text-white transition-all"
+            className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-red-900/40 hover:text-red-400 transition-all"
           >
-            <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
             </svg>
             <span>تسجيل الخروج</span>
@@ -83,21 +98,21 @@ export default function Layout({ children }) {
         </div>
       </aside>
 
-      {/* Main area — offset from sidebar */}
-      <div className="flex-1 flex flex-col mr-56 min-w-0">
-        {/* White top bar */}
-        <header className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-end shadow-sm sticky top-0 z-40">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-            </div>
+      {/* Main */}
+      <div className="flex-1 flex flex-col mr-52 min-w-0">
+        {/* Top header */}
+        <header className="bg-white border-b border-slate-200 px-5 py-2.5 flex items-center justify-between sticky top-0 z-40">
+          <div className="flex items-center gap-2 text-slate-500 text-xs">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            {new Date().toLocaleDateString('ar-IQ', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
+          <h1 className="text-sm font-bold text-slate-700">{pageTitle}</h1>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 bg-slate-50 p-6 overflow-y-auto">
+        {/* Content */}
+        <main className="flex-1 p-4 overflow-y-auto">
           {children}
         </main>
       </div>
